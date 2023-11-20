@@ -1,0 +1,17 @@
+.idea/
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+*.egg
+env/
+venv/
+.venv/
+*.log
+*.csv
+*.json
+*.xml
+*.pkl
+.DS_Store  # macOS
+Thumbs.db  # Windows
