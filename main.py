@@ -51,6 +51,10 @@ class Worker(threading.Thread):
                 break  # Stop signal
 
             try:
+                # no generic delay
+                # if job.delay > 0:
+                #     print(f"Delaying execution by {job.delay} seconds...")
+                #     time.sleep(job.delay)
                 job.perform()
                 job.current_retries = 0  # Reset retry count after successful execution
             except Exception as e:
@@ -70,31 +74,44 @@ class Worker(threading.Thread):
 
 
 class SendMessage(Worker):
-    def __init__(self, queue):
+    def __init__(self, queue, delay=0):
         super().__init__(queue, None)
+        self.delay = delay
         self.current_retries = 0  # Add retry counter to the job
 
     def perform(self):
+        if self.delay > 0:
+            print(f"Delaying execution by {self.delay} seconds...")
+            time.sleep(self.delay)
+            print("Sending message...")
         print("Sending message...")
 
 
 class MakeUserActive(Worker):
-    def __init__(self, queue, max_retries=10, retry_delay=1):
+    def __init__(self, queue, max_retries=10, retry_delay=1, delay=1):
         super().__init__(queue, None, max_retries, retry_delay)
+        self.delay = delay
         self.current_retries = 0  # Add retry counter to the job
 
     def perform(self):
+        if self.delay > 0:
+            print(f"Delaying execution by {self.delay} seconds...")
+            time.sleep(self.delay)
         if random.random() < 0.5:  # 50% chance to simulate an error
             raise Exception("Simulated error: Unable to set user role.")
         print(f"Successfully set role for user")
 
 
 class GenerateImages(Worker):
-    def __init__(self, queue, max_retries=3, retry_delay=1):
+    def __init__(self, queue, max_retries=10, retry_delay=1, delay=3):
         super().__init__(queue, None, max_retries, retry_delay)
+        self.delay = delay
 
     def perform(self):
-        # Implement the logic for generating images
+        if self.delay > 0:
+            print(f"Delaying execution by {self.delay} seconds...")
+            time.sleep(self.delay)
+            # Implement the logic for generating images
         print("Generating images...")
 
 
@@ -140,14 +157,10 @@ class Runner:
 
 
 if __name__ == '__main__':
-    runner = Runner(worker_count=3)
+    runner = Runner(worker_count=10)
 
-    # Add jobs to the default queue
     runner.add_job(SendMessage(runner.queues["default"]))
     runner.add_job(MakeUserActive(runner.queues["default"]))
-
-    # Add a GenerateImages job to the image generation queue
     runner.add_job(GenerateImages(runner.queues["image_generation"]), queue_name="image_generation")
-
     # Run the system
     runner.run()
