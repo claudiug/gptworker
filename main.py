@@ -1,11 +1,43 @@
+from abc import ABC, abstractmethod
+from queue import Queue as StdQueue
 import random
 import threading
 import time
-from queue import Queue
+
+
+class AbstractQueue(ABC):
+    @abstractmethod
+    def get(self):
+        pass
+
+    @abstractmethod
+    def put(self, item):
+        pass
+
+    @abstractmethod
+    def task_done(self):
+        pass
+
+
+class PythonQueue(AbstractQueue):
+    def __init__(self):
+        self.queue = StdQueue()
+
+    def get(self):
+        return self.queue.get()
+
+    def put(self, item):
+        self.queue.put(item)
+
+    def task_done(self):
+        self.queue.task_done()
+
+    def join(self):
+        self.queue.join()
 
 
 class Worker(threading.Thread):
-    def __init__(self, queue, stop_signal, max_retries=0, retry_delay=1):
+    def __init__(self, queue: AbstractQueue, stop_signal, max_retries=0, retry_delay=1):
         super().__init__()
         self.queue = queue
         self.stop_signal = stop_signal
@@ -15,7 +47,7 @@ class Worker(threading.Thread):
     def run(self):
         while True:
             job = self.queue.get()
-            if job is None:
+            if job is self.stop_signal:
                 break  # Stop signal
 
             try:
@@ -57,34 +89,65 @@ class MakeUserActive(Worker):
         print(f"Successfully set role for user")
 
 
+class GenerateImages(Worker):
+    def __init__(self, queue, max_retries=3, retry_delay=1):
+        super().__init__(queue, None, max_retries, retry_delay)
+
+    def perform(self):
+        # Implement the logic for generating images
+        print("Generating images...")
+
+
 class Runner:
     def __init__(self, worker_count):
         self.worker_count = worker_count
-        self.queue = Queue()
-        self.workers = []
+        self.queues = {"default": PythonQueue(), "image_generation": PythonQueue()}
+        self.workers = {}
 
-    def start_workers(self):
-        for _ in range(self.worker_count):
-            worker = Worker(self.queue, None)
+    def start_workers(self, queue_name="default", worker_count=None):
+        if worker_count is None:
+            worker_count = self.worker_count
+        if queue_name not in self.queues:
+            raise ValueError(f"Queue '{queue_name}' does not exist.")
+
+        self.workers[queue_name] = []
+        for _ in range(worker_count):
+            worker = Worker(self.queues[queue_name], None)
             worker.daemon = True
             worker.start()
-            self.workers.append(worker)
+            self.workers[queue_name].append(worker)
 
-    def add_job(self, job):
-        self.queue.put(job)
+    def add_job(self, job, queue_name="default"):
+        self.queues[queue_name].put(job)
 
     def stop_workers(self):
-        for _ in self.workers:
-            self.queue.put(None)  # None acts as a stop signal
+        for queue in self.queues.values():
+            for _ in range(self.worker_count):
+                self.add_job(None)  # Add None as a stop signal to the queue
+
+        for worker_list in self.workers.values():
+            for worker in worker_list:
+                worker.join()  # Call join on worker threads, not queues
 
     def run(self):
-        self.start_workers()
-        self.queue.join()
-        self.stop_workers()
+        for queue_name in self.queues:
+            self.start_workers(queue_name)
+
+        for queue in self.queues.values():
+            queue.join()  # Wait for all jobs in the queue to be processed
+
+        self.stop_workers()  # Stop the worker threads
 
 
 if __name__ == '__main__':
     runner = Runner(worker_count=3)
-    runner.add_job(SendMessage(runner.queue))
-    runner.add_job(MakeUserActive(runner.queue))
+
+    # Add jobs to the default queue
+    runner.add_job(SendMessage(runner.queues["default"]))
+    runner.add_job(MakeUserActive(runner.queues["default"]))
+
+    # Add a GenerateImages job to the image generation queue
+    runner.add_job(GenerateImages(runner.queues["image_generation"]), queue_name="image_generation")
+
+    # Run the system
     runner.run()
