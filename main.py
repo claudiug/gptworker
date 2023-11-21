@@ -36,6 +36,23 @@ class PythonQueue(AbstractQueue):
         self.queue.join()
 
 
+class MailQueue(AbstractQueue):
+    def __init__(self):
+        self.queue = StdQueue()
+
+    def get(self):
+        return self.queue.get()
+
+    def put(self, item):
+        self.queue.put(item)
+
+    def task_done(self):
+        self.queue.task_done()
+
+    def join(self):
+        self.queue.join()
+
+
 class Worker(threading.Thread):
     def __init__(self, queue: AbstractQueue, stop_signal, max_retries=0, retry_delay=1):
         super().__init__()
@@ -158,7 +175,7 @@ class Runner:
 
 if __name__ == '__main__':
     runner = Runner(worker_count=10)
-
+    runner.queues["mailing"] = MailQueue()
     runner.add_job(SendMessage(runner.queues["default"]))
     runner.add_job(MakeUserActive(runner.queues["default"]))
     runner.add_job(GenerateImages(runner.queues["image_generation"]), queue_name="image_generation")
