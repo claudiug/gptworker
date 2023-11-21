@@ -66,7 +66,6 @@ class Worker(threading.Thread):
         self.stop_signal = stop_signal
         self.max_retries = max_retries
         self.retry_delay = retry_delay
-        self.job_id = None  # Variable to store the current job's ID
         self.logger = logging.getLogger(self.__class__.__name__)  # Create a logger for the worker class
 
     def run(self):
@@ -166,7 +165,7 @@ class Runner:
     def stop_workers(self):
         for queue in self.queues.values():
             for _ in range(self.worker_count):
-                self.add_job(None)  # Add None as a stop signal to the queue
+                queue.put(None)  # Add None as a stop signal to the queue
 
         for worker_list in self.workers.values():
             for worker in worker_list:
