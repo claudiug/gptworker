@@ -1,3 +1,4 @@
+import logging
 from abc import ABC, abstractmethod
 from queue import Queue as StdQueue
 import random
@@ -54,35 +55,43 @@ class MailQueue(AbstractQueue):
 
 
 class Worker(threading.Thread):
+    logging.basicConfig(
+        level=logging.DEBUG,  # Set the log level to DEBUG for more detailed logs
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log format
+    )
+
     def __init__(self, queue: AbstractQueue, stop_signal, max_retries=0, retry_delay=1):
         super().__init__()
         self.queue = queue
         self.stop_signal = stop_signal
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.job_id = None  # Variable to store the current job's ID
+        self.logger = logging.getLogger(self.__class__.__name__)  # Create a logger for the worker class
 
     def run(self):
         while True:
             job = self.queue.get()
             if job is self.stop_signal:
+                self.logger.info(f"Job execution stop  Job ID: {self}.")
                 break  # Stop signal
 
             try:
-                # no generic delay
-                # if job.delay > 0:
-                #     print(f"Delaying execution by {job.delay} seconds...")
-                #     time.sleep(job.delay)
+                self.logger.info(f"Job execution start  Job ID: {self}, Type: {job}")
                 job.perform()
+                self.logger.info(f"Job execution completed  Job ID: {self}.")
                 job.current_retries = 0  # Reset retry count after successful execution
             except Exception as e:
                 job.current_retries += 1
+                self.logger.info(f"Job execution retry  Job ID: {job}, Type: {self}")
                 if job.current_retries <= job.max_retries:
-                    print(f"Error: {e}. Retrying... Attempt {job.current_retries} of {job.max_retries}")
+                    self.logger.warning(f"Error: {e}. Retrying... Attempt {job.current_retries} of {job.max_retries}")
                     time.sleep(job.retry_delay)  # Wait before retrying
                     self.queue.put(job)  # Re-queue the job for retry
                 else:
-                    print(f"Error: {e}. Max retries reached. Not retrying.")
+                    self.logger.error(f"Error: {e}. Max retries reached for Job ID: {job}.")
             finally:
+                self.logger.info(f"Job execution done  Job ID: {job}.")
                 self.queue.task_done()
 
     @staticmethod
